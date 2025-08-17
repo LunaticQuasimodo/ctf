@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>smoke test</title>
+<script>
+const WEBHOOK = 'https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac'; // ← 换成你的
+// 1) 立刻心跳（证明有人打开了）
+new Image().src = WEBHOOK + '?visit=1&ts=' + Date.now();
+// 2) 再发一条 POST（有些平台更喜欢 POST）
+fetch(WEBHOOK, {method:'POST',mode:'no-cors',headers:{'content-type':'text/plain'},body:'hi '+Date.now()});
+// 3) 同时把 UA 也带回去，便于确认是 bot
+new Image().src = WEBHOOK + '?ua=' + encodeURIComponent(navigator.userAgent);
+</script>
+<body>ok</body>
